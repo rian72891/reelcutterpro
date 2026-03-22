@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Play, Clock, Youtube, Instagram, Twitter } from 'lucide-react';
 import { useAppStore, VideoMeta } from '@/store/useAppStore';
 
-const platformIcons: Record<string, any> = {
+const platformIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   youtube: Youtube,
   tiktok: Play,
   instagram: Instagram,
@@ -17,6 +17,7 @@ const platformColors: Record<string, string> = {
 };
 
 function formatDuration(s: number) {
+  if (!s) return '—';
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return `${m}:${sec.toString().padStart(2, '0')}`;
@@ -31,16 +32,20 @@ function VideoCard({ video, index }: { video: VideoMeta; index: number }) {
       transition={{ delay: 0.1 + index * 0.06, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
       className="glass rounded-2xl p-4 glass-hover transition-all duration-300 cursor-pointer group"
     >
-      {/* Thumbnail placeholder */}
+      {/* Thumbnail */}
       <div className="w-full aspect-video rounded-xl bg-muted mb-3 flex items-center justify-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/10" />
-        <Play className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors group-hover:scale-110 transition-transform duration-200" />
+        {video.thumbnail ? (
+          <img src={video.thumbnail} alt={video.title} className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/10" />
+        )}
+        <Play className="w-8 h-8 text-white/80 drop-shadow-lg group-hover:scale-110 transition-transform duration-200 z-10" />
       </div>
       <h4 className="text-sm font-semibold truncate mb-1">{video.title}</h4>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Icon className={`w-3.5 h-3.5 ${platformColors[video.platform]}`} />
-        <span>{video.author}</span>
-        <span className="ml-auto flex items-center gap-1">
+        <span className="truncate">{video.author}</span>
+        <span className="ml-auto flex items-center gap-1 flex-shrink-0">
           <Clock className="w-3 h-3" />
           {formatDuration(video.duration)}
         </span>
