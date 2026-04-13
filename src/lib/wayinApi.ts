@@ -94,9 +94,8 @@ export async function getExportResults(taskId: string): Promise<WayinTaskRespons
  * supabase.functions.invoke doesn't support query params natively.
  */
 async function invokeWithParams(action: string, method: 'GET' | 'POST', params?: Record<string, string>, body?: unknown) {
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   const baseUrl = `${supabaseUrl}/functions/v1/${FUNCTION_NAME}`;
   const queryString = new URLSearchParams({ action, ...params }).toString();
