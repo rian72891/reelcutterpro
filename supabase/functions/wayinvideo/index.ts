@@ -5,6 +5,15 @@ const corsHeaders = {
 
 const WAYIN_BASE = 'https://wayinvideo-api.wayin.ai/api/v2';
 
+/** Map seconds to WayinVideo duration enum */
+function mapDuration(seconds: number): string {
+  if (seconds <= 30) return 'DURATION_0_30';
+  if (seconds <= 60) return 'DURATION_30_60';
+  if (seconds <= 90) return 'DURATION_60_90';
+  if (seconds <= 180) return 'DURATION_90_180';
+  return 'DURATION_180_300';
+}
+
 function getApiKey(): string {
   const key = Deno.env.get('WAYINVIDEO_API_KEY');
   if (!key) throw new Error('WAYINVIDEO_API_KEY not configured');
