@@ -4,9 +4,10 @@ import { StepIndicator } from './StepIndicator';
 import { useState } from 'react';
 import {
   Download, Loader2, Check, ArrowLeft, Type, Palette, Maximize,
-  Terminal, FileJson, Copy, CheckCheck, AlertTriangle, FileText,
+  Terminal, FileJson, Copy, CheckCheck, FileText, ExternalLink, Sparkles,
 } from 'lucide-react';
 import { generateShellScript, generateFFmpegCommand, generateConfigJSON, downloadTextFile, type ExportConfig } from '@/lib/ffmpegCommands';
+import { useVideoProcessing } from '@/hooks/useVideoProcessing';
 
 const captionStyles = [
   { id: 'tiktok', name: 'TikTok', color: '#FFFF00', bg: 'transparent', preview: 'text-yellow-400 font-black' },
@@ -18,8 +19,6 @@ const captionStyles = [
 const formats = ['9:16', '1:1', '16:9'] as const;
 const qualities = ['720p', '1080p'] as const;
 
-type ExportMode = 'script' | 'command' | 'config';
-
 export function CaptionEditor() {
   const {
     captionStyle, setCaptionStyle,
@@ -28,14 +27,14 @@ export function CaptionEditor() {
     setStep, currentVideo, smartCuts, manualRange, cutMode,
   } = useAppStore();
 
-  const [exportMode, setExportMode] = useState<ExportMode | null>(null);
+  const { exportClips, downloadExportedClip, exportDownloadUrl, isExporting, processingStatus } = useVideoProcessing();
+
   const [copied, setCopied] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
 
   const getExportConfig = (): ExportConfig => {
     let startTime = 0;
     let endTime = 30;
-
     if (cutMode === 'manual') {
       startTime = manualRange[0];
       endTime = manualRange[1];
@@ -46,7 +45,6 @@ export function CaptionEditor() {
         endTime = selected.endTime;
       }
     }
-
     return {
       videoUrl: currentVideo?.url || '',
       startTime,
@@ -65,20 +63,20 @@ export function CaptionEditor() {
     setTimeout(() => setDownloaded(false), 3000);
   };
 
-  const handleDownloadConfig = () => {
-    const config = getExportConfig();
-    const json = generateConfigJSON(config);
-    downloadTextFile(json, 'reelcutter_config.json', 'application/json');
-    setDownloaded(true);
-    setTimeout(() => setDownloaded(false), 3000);
-  };
-
   const handleCopyCommand = async () => {
     const config = getExportConfig();
     const cmd = generateFFmpegCommand(config);
     await navigator.clipboard.writeText(cmd);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadConfig = () => {
+    const config = getExportConfig();
+    const json = generateConfigJSON(config);
+    downloadTextFile(json, 'reelcutter_config.json', 'application/json');
+    setDownloaded(true);
+    setTimeout(() => setDownloaded(false), 3000);
   };
 
   const selectedCut = smartCuts.find((c) => c.selected);
@@ -101,7 +99,6 @@ export function CaptionEditor() {
           {/* Preview (60%) */}
           <div className="lg:col-span-3">
             <div className="glass rounded-2xl p-4">
-              {/* Video embed or thumbnail */}
               <div
                 className={`bg-muted rounded-xl flex items-center justify-center relative overflow-hidden mx-auto ${
                   selectedFormat === '9:16' ? 'aspect-[9/16] max-w-[280px]' :
@@ -110,15 +107,10 @@ export function CaptionEditor() {
                 }`}
               >
                 {currentVideo?.thumbnail ? (
-                  <img
-                    src={currentVideo.thumbnail}
-                    alt={currentVideo.title}
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
+                  <img src={currentVideo.thumbnail} alt={currentVideo.title} className="absolute inset-0 w-full h-full object-cover" />
                 ) : (
                   <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5" />
                 )}
-                {/* Caption overlay */}
                 <div className="absolute bottom-8 left-0 right-0 text-center px-4 z-10">
                   <p
                     className={`text-lg leading-tight ${captionStyles.find(s => s.id === captionStyle)?.preview}`}
@@ -127,7 +119,6 @@ export function CaptionEditor() {
                     {selectedCut?.transcript?.slice(0, 60) || 'Esse é o momento mais importante do vídeo'}
                   </p>
                 </div>
-                {/* Info badge */}
                 <div className="absolute top-3 right-3 bg-black/60 text-white text-xs font-mono px-2 py-1 rounded-lg z-10">
                   {cutDuration}s • {selectedFormat}
                 </div>
@@ -136,11 +127,23 @@ export function CaptionEditor() {
                 )}
               </div>
 
-              {/* Video info */}
               {currentVideo && (
                 <div className="mt-4 px-1">
                   <h3 className="text-sm font-semibold truncate">{currentVideo.title}</h3>
                   <p className="text-xs text-muted-foreground mt-1">{currentVideo.author} • {currentVideo.platform}</p>
+                </div>
+              )}
+
+              {/* Clip titles from WayinVideo */}
+              {selectedCut && (selectedCut as any).title && (
+                <div className="mt-3 p-3 rounded-xl bg-primary/5 border border-primary/10">
+                  <p className="text-xs font-semibold text-primary mb-1">Título sugerido pela IA:</p>
+                  <p className="text-sm font-medium">{(selectedCut as any).title}</p>
+                  {(selectedCut as any).hashtags?.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(selectedCut as any).hashtags.slice(0, 5).join(' ')}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -221,41 +224,78 @@ export function CaptionEditor() {
               </h3>
 
               <div className="space-y-2">
-                {/* Download Script */}
+                {/* AI Export via WayinVideo */}
                 <button
-                  onClick={handleDownloadScript}
-                  className="w-full py-3 rounded-xl gradient-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.97]"
+                  onClick={exportClips}
+                  disabled={isExporting}
+                  className="w-full py-3 rounded-xl gradient-primary text-primary-foreground font-semibold text-sm flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.97] disabled:opacity-50"
                 >
-                  <Terminal className="w-4 h-4" />
-                  Baixar Script Completo (.sh)
-                </button>
-
-                {/* Copy FFmpeg command */}
-                <button
-                  onClick={handleCopyCommand}
-                  className="w-full py-3 rounded-xl bg-muted text-foreground font-medium text-sm flex items-center justify-center gap-2 hover:bg-muted/80 transition-colors active:scale-[0.97]"
-                >
-                  {copied ? (
+                  {isExporting ? (
                     <>
-                      <CheckCheck className="w-4 h-4 text-success" />
-                      Copiado!
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {processingStatus || 'Exportando...'}
                     </>
                   ) : (
                     <>
-                      <Copy className="w-4 h-4" />
-                      Copiar Comando FFmpeg
+                      <Sparkles className="w-4 h-4" />
+                      Gerar Reel com IA
                     </>
                   )}
                 </button>
 
-                {/* Download config JSON */}
-                <button
-                  onClick={handleDownloadConfig}
-                  className="w-full py-3 rounded-xl bg-muted text-foreground font-medium text-sm flex items-center justify-center gap-2 hover:bg-muted/80 transition-colors active:scale-[0.97]"
-                >
-                  <FileJson className="w-4 h-4" />
-                  Baixar Config (.json)
-                </button>
+                {/* Download button when export is ready */}
+                {exportDownloadUrl && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <button
+                      onClick={downloadExportedClip}
+                      className="w-full py-3 rounded-xl bg-success/20 text-success font-semibold text-sm flex items-center justify-center gap-2 border border-success/30 hover:bg-success/30 transition-colors active:scale-[0.97]"
+                    >
+                      <Download className="w-4 h-4" />
+                      Baixar Reel Pronto
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </motion.div>
+                )}
+
+                <div className="border-t border-border my-3 pt-3">
+                  <p className="text-xs text-muted-foreground mb-2">Ou use modo local:</p>
+
+                  <button
+                    onClick={handleDownloadScript}
+                    className="w-full py-2.5 rounded-xl bg-muted text-foreground font-medium text-sm flex items-center justify-center gap-2 hover:bg-muted/80 transition-colors active:scale-[0.97] mb-2"
+                  >
+                    <Terminal className="w-4 h-4" />
+                    Baixar Script (.sh)
+                  </button>
+
+                  <button
+                    onClick={handleCopyCommand}
+                    className="w-full py-2.5 rounded-xl bg-muted text-foreground font-medium text-sm flex items-center justify-center gap-2 hover:bg-muted/80 transition-colors active:scale-[0.97] mb-2"
+                  >
+                    {copied ? (
+                      <>
+                        <CheckCheck className="w-4 h-4 text-success" />
+                        Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copiar Comando FFmpeg
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleDownloadConfig}
+                    className="w-full py-2.5 rounded-xl bg-muted text-foreground font-medium text-sm flex items-center justify-center gap-2 hover:bg-muted/80 transition-colors active:scale-[0.97]"
+                  >
+                    <FileJson className="w-4 h-4" />
+                    Baixar Config (.json)
+                  </button>
+                </div>
               </div>
 
               {downloaded && (
@@ -274,14 +314,12 @@ export function CaptionEditor() {
             <div className="glass rounded-2xl p-4">
               <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-warning" />
-                Como usar
+                Como funciona
               </h3>
-              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                <li>Instale <code className="font-mono text-foreground/80 bg-muted px-1 rounded">yt-dlp</code> e <code className="font-mono text-foreground/80 bg-muted px-1 rounded">ffmpeg</code></li>
-                <li>Baixe o script ou copie o comando</li>
-                <li>Execute no terminal: <code className="font-mono text-foreground/80 bg-muted px-1 rounded">bash reelcutter_process.sh</code></li>
-                <li>O reel será gerado na pasta atual</li>
-              </ol>
+              <div className="text-xs text-muted-foreground space-y-2">
+                <p><span className="text-primary font-semibold">Opção 1 — IA (recomendado):</span> Clique em "Gerar Reel com IA". O vídeo será processado na nuvem com legendas automáticas e formato otimizado.</p>
+                <p><span className="text-foreground font-semibold">Opção 2 — Local:</span> Baixe o script e execute no terminal com <code className="font-mono text-foreground/80 bg-muted px-1 rounded">yt-dlp</code> e <code className="font-mono text-foreground/80 bg-muted px-1 rounded">ffmpeg</code> instalados.</p>
+              </div>
             </div>
           </div>
         </div>

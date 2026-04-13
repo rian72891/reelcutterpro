@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link2, ArrowRight, Loader2, AlertTriangle } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { fetchVideoMetadata, validateVideoUrl } from '@/lib/videoApi';
+import { validateVideoUrl } from '@/lib/videoApi';
+import { useVideoProcessing } from '@/hooks/useVideoProcessing';
 
 export function URLInput() {
-  const { videoUrl, setVideoUrl, setStep, setIsProcessing, setProgress, setCurrentVideo, setSmartCuts, addRecentVideo } = useAppStore();
+  const { videoUrl, setVideoUrl } = useAppStore();
+  const { analyzeVideo, processingStatus } = useVideoProcessing();
   const [isFocused, setIsFocused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -14,51 +16,16 @@ export function URLInput() {
 
   const handleSubmit = async () => {
     if (!validation.valid) return;
-
     setError(null);
     setLoading(true);
-    setIsProcessing(true);
-    setStep('analyzing');
-    setProgress(10);
 
     try {
-      // Real API call to fetch metadata
-      setProgress(30);
-      const metadata = await fetchVideoMetadata(videoUrl);
-      setProgress(60);
-
-      const video = {
-        id: Date.now().toString(),
-        url: videoUrl,
-        title: metadata.title,
-        author: metadata.author,
-        duration: metadata.duration || 480,
-        platform: metadata.platform,
-        thumbnail: metadata.thumbnail,
-        processedAt: new Date().toISOString(),
-      };
-
-      setCurrentVideo(video);
-      addRecentVideo(video);
-      setProgress(80);
-
-      // Generate smart cut suggestions based on video duration
-      const dur = video.duration || 480;
-      const cuts = generateSmartCuts(dur);
-      setSmartCuts(cuts);
-
-      setProgress(100);
-      await new Promise((r) => setTimeout(r, 300));
-
-      setStep('selecting');
+      await analyzeVideo(videoUrl);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro desconhecido ao analisar vídeo';
       setError(message);
-      setStep('idle');
     } finally {
       setLoading(false);
-      setIsProcessing(false);
-      setProgress(0);
     }
   };
 
@@ -81,7 +48,7 @@ export function URLInput() {
           onChange={(e) => { setVideoUrl(e.target.value); setError(null); }}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          onKeyDown={(e) => e.key === 'Enter' && validation.valid && handleSubmit()}
+          onKeyDown={(e) => e.key === 'Enter' && validation.valid && !loading && handleSubmit()}
           placeholder="Cole um link do YouTube, TikTok ou Instagram"
           className="flex-1 bg-transparent pl-12 pr-4 py-4 text-foreground placeholder:text-muted-foreground focus:outline-none text-base"
         />
@@ -100,6 +67,18 @@ export function URLInput() {
           )}
         </button>
       </div>
+
+      {/* Processing status */}
+      {loading && processingStatus && (
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-sm text-muted-foreground mt-3 text-center flex items-center justify-center gap-2"
+        >
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+          {processingStatus}
+        </motion.p>
+      )}
 
       {videoUrl && !validation.valid && validation.error && (
         <p className="text-destructive text-sm mt-2 pl-2">
@@ -124,29 +103,4 @@ export function URLInput() {
       )}
     </motion.div>
   );
-}
-
-function generateSmartCuts(videoDuration: number) {
-  const segments = Math.min(4, Math.max(2, Math.floor(videoDuration / 60)));
-  const cuts = [];
-  for (let i = 0; i < segments; i++) {
-    const start = Math.floor((videoDuration / segments) * i) + Math.floor(Math.random() * 15);
-    const duration = 25 + Math.floor(Math.random() * 10);
-    const end = Math.min(start + duration, videoDuration);
-    cuts.push({
-      id: (i + 1).toString(),
-      startTime: start,
-      endTime: end,
-      score: Math.floor(95 - i * 12 - Math.random() * 8),
-      transcript: [
-        'Esse é o momento mais importante do vídeo, onde o ponto principal é apresentado.',
-        'Uma revelação surpreendente que gera muito engajamento.',
-        'Dica prática que o público pode aplicar imediatamente.',
-        'Momento que pode viralizar nas redes sociais.',
-      ][i] || 'Trecho relevante do vídeo.',
-      thumbnail: '',
-      selected: i === 0,
-    });
-  }
-  return cuts;
 }
