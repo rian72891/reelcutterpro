@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           video_url,
           clip_count: clip_count || 5,
-          target_duration: target_duration || 30,
+          target_duration: mapDuration(target_duration || 30),
           language: language || 'pt',
           enable_export: false,
         }),
